@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="CombinedOPDRegistrationBilling" tests="1" file=".py" time="61.220" timestamp="2025-08-19T14:19:20" failures="0" errors="0" skipped="0">
+	<testcase classname="CombinedOPDRegistrationBilling" name="test_combined_opd_registration_and_billing" time="61.220" timestamp="2025-08-19T14:19:20" file="OpdregisterandOpdBilling.py" line="187">
+		<!--
+Combined test method: 
+1. Perform OPD registration
+2. Navigate to OPD billing
+3. Use the captured patient ID for billing
+4. Complete the billing process
+-->
+	</testcase>
+</testsuite>

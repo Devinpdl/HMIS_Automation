@@ -1,4 +1,7 @@
 import os
+import sys
+# Add the parent directory of 'utilities' to sys.path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import re
 import time
 import logging
@@ -289,8 +292,8 @@ class CombinedOPDRegistrationBilling(unittest.TestCase):
             logging.info("Patient information loaded")
             self.__take_screenshot("PATIENT_INFO_LOADED")
 
-            # Select CBC test
-            self.__select_cbc_test()
+            # Select tests (CBC and ABO & Rh Factor)
+            self.__select_test()
 
             # Enter remarks
             remarks_field = self.wait.until(EC.presence_of_element_located((By.ID, "billRemarks")))
@@ -313,60 +316,89 @@ class CombinedOPDRegistrationBilling(unittest.TestCase):
             logging.error(f"Billing test failed: {str(e)}")
             raise
 
-    def __select_cbc_test(self):
+    def __select_test(self):
         """
-        Select CBC test from dropdown
+        Select CBC and ABO & Rh Factor tests from dropdown and handle performedByModal
         """
         short_wait = WebDriverWait(self.driver, 5)
+        tests = ["Complete Blood Cell Count", "ABO & Rh Factor"]
         
-        try:
-            # Locate and open the test dropdown
+        for test_name in tests:
             try:
-                dropdown = short_wait.until(EC.element_to_be_clickable(
-                    (By.XPATH, "//span[@id='select2-chosen-26']"))
-                )
-            except TimeoutException:
-                dropdown = short_wait.until(EC.element_to_be_clickable(
-                    (By.XPATH, "//span[starts-with(@id, 'select2-chosen-')]"))
-                )
-            dropdown.click()
-            logging.info("Test dropdown clicked")
-            self.__take_screenshot("TEST_DROPDOWN_CLICKED")
-            time.sleep(0.5)
+                # Locate and open the test dropdown
+                try:
+                    dropdown = short_wait.until(EC.element_to_be_clickable(
+                        (By.XPATH, "//span[starts-with(@id, 'select2-chosen-')]"))
+                    )
+                except TimeoutException:
+                    dropdown = short_wait.until(EC.element_to_be_clickable(
+                        (By.XPATH, "//span[starts-with(@id, 'select2-chosen-')]"))
+                    )
+                dropdown.click()
+                logging.info(f"Test dropdown clicked for {test_name}")
+                self.__take_screenshot(f"TEST_DROPDOWN_CLICKED_{test_name.replace(' ', '_')}")
+                time.sleep(0.5)
 
-            # Locate search input
-            try:
-                search_input = short_wait.until(EC.presence_of_element_located(
-                    (By.XPATH, "//div[contains(@class, 'select2-drop-active')]//input[contains(@id, 'search')]"))
-                )
-            except TimeoutException:
-                search_input = short_wait.until(EC.presence_of_element_located(
-                    (By.XPATH, "//div[contains(@class, 'select2-drop-active')]//input"))
-                )
-            
-            search_input.clear()
-            search_input.send_keys("Complete Blood Cell Count")
-            logging.info("Entered CBC in search")
-            self.__take_screenshot("CBC_SEARCH_ENTERED")
-            time.sleep(1)
+                # Locate search input
+                try:
+                    search_input = short_wait.until(EC.presence_of_element_located(
+                        (By.XPATH, "//div[contains(@class, 'select2-drop-active')]//input"))
+                    )
+                except TimeoutException:
+                    search_input = short_wait.until(EC.presence_of_element_located(
+                        (By.XPATH, "//div[contains(@class, 'select2-drop-active')]//input"))
+                    )
+                
+                search_input.clear()
+                search_input.send_keys(test_name)
+                logging.info(f"Entered {test_name} in search")
+                time.sleep(1)
 
-            # Select "Complete Blood Cell Count"
-            try:
-                cbc_option = short_wait.until(EC.element_to_be_clickable(
-                    (By.XPATH, "//div[contains(@class, 'select2-result-label') and contains(text(), 'Complete Blood Cell Count')]"))
-                )
-            except TimeoutException:
-                cbc_option = short_wait.until(EC.element_to_be_clickable(
-                    (By.XPATH, "//div[contains(text(), 'Complete Blood Cell Count')]"))
-                )
-            cbc_option.click()
-            logging.info("Complete Blood Cell Count selected")
-            self.__take_screenshot("CBC_SELECTED")
+                # Select the test
+                try:
+                    test_option = short_wait.until(EC.element_to_be_clickable(
+                        (By.XPATH, f"//div[contains(@class, 'select2-result-label') and contains(text(), '{test_name}')]"))
+                    )
+                except TimeoutException:
+                    test_option = short_wait.until(EC.element_to_be_clickable(
+                        (By.XPATH, f"//div[contains(text(), '{test_name}')]"))
+                    )
+                test_option.click()
+                logging.info(f"{test_name} selected")
+                self.__take_screenshot(f"{test_name.replace(' ', '_')}_SELECTED")
 
-        except Exception as e:
-            self.__take_screenshot("CBC_SELECTION_ERROR")
-            logging.error(f"Failed to select CBC: {str(e)}")
-            raise
+                # Handle performedByModal for non-pathology tests
+                if test_name == "ABO & Rh Factor":
+                    try:
+                        modal = short_wait.until(EC.visibility_of_element_located(
+                            (By.ID, "performedByModal")))
+                        logging.info("Performed By modal detected")
+                        self.__take_screenshot("PERFORMED_BY_MODAL")
+
+                        # Verify default selection is SELF
+                        select_element = short_wait.until(EC.presence_of_element_located(
+                            (By.XPATH, "//span[@class='select2-chosen' and text()='SELF']")))
+                        logging.info("Default selection 'SELF' confirmed")
+
+                        # Click Select button
+                        select_btn = short_wait.until(EC.element_to_be_clickable(
+                            (By.XPATH, "//button[@type='submit' and contains(@class, 'antoclose')]")))
+                        select_btn.click()
+                        logging.info("Clicked Select button in performedByModal")
+                        self.__take_screenshot("PERFORMED_BY_MODAL_SUBMITTED")
+
+                        # Wait for modal to close
+                        short_wait.until(EC.invisibility_of_element_located((By.ID, "performedByModal")))
+                        logging.info("Performed By modal closed")
+
+                    except TimeoutException:
+                        logging.warning("Performed By modal did not appear or already closed")
+                        self.__take_screenshot("NO_PERFORMED_BY_MODAL")
+
+            except Exception as e:
+                self.__take_screenshot(f"{test_name.replace(' ', '_')}_SELECTION_ERROR")
+                logging.error(f"Failed to select {test_name}: {str(e)}")
+                raise
 
     def __submit_billing_form(self):
         """
