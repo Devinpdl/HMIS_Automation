@@ -1,18 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="OPDBilling" tests="1" file=".py" time="5.743" timestamp="2025-08-21T14:39:23" failures="0" errors="1" skipped="0">
-	<testcase classname="OPDBilling" name="test_opd_billing" time="5.743" timestamp="2025-08-21T14:39:23" file="OpdBilling.py" line="196">
+<testsuite name="OPDBilling" tests="1" file=".py" time="45.970" timestamp="2025-08-21T15:25:38" failures="0" errors="0" skipped="0">
+	<testcase classname="OPDBilling" name="test_opd_billing" time="45.970" timestamp="2025-08-21T15:25:38" file="OpdBilling.py" line="213">
 		<!--
 Test method: Perform OPD billing using the latest patient ID and select both CBC and ABO & Rh Factor tests.
 -->
-		<error type="ValueError" message="No patient ID files found in any patient_ids folder (opd_billing, opd_combined, opd_registration)"><![CDATA[Traceback (most recent call last):
-  File "C:\xampp7\htdocs\Python_Selenium\Hims_Automation\OPD Management\OpdBilling.py", line 201, in test_opd_billing
-    self.__perform_opd_billing()
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^
-  File "C:\xampp7\htdocs\Python_Selenium\Hims_Automation\OPD Management\OpdBilling.py", line 221, in __perform_opd_billing
-    patient_id_to_use = self.__get_latest_patient_id()
-  File "C:\xampp7\htdocs\Python_Selenium\Hims_Automation\OPD Management\OpdBilling.py", line 180, in __get_latest_patient_id
-    raise ValueError("No patient ID files found in any patient_ids folder (opd_billing, opd_combined, opd_registration)")
-ValueError: No patient ID files found in any patient_ids folder (opd_billing, opd_combined, opd_registration)
-]]></error>
 	</testcase>
 </testsuite>
