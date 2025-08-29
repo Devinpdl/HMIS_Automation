@@ -226,7 +226,7 @@ class OPDRegistration(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main(
+    unittest.main(0
         testRunner=xmlrunner.XMLTestRunner(output=report_dir, verbosity=2),
         failfast=False, buffer=False, catchbreak=False
     )
