@@ -85,15 +85,55 @@ class EMRCollectDueBills(unittest.TestCase):
         Collect EMR due bills from the bill list.
         """
         try:
+            # Navigate to the specific EMR bill list URL
+            self.driver.get("http://lunivacare.ddns.net:8080/himsnew/bill/bill_list?list=Emergency")
+            time.sleep(3)  # Wait for page to load
+            logging.info("Navigated to EMR Bill List")
+            self.__take_screenshot("EMR_BILL_LIST")
+            
+            # === DATE FILTERING SECTION ===
+            # COMMENT OUT THIS SECTION IF YOU WANT TO USE THE DEFAULT LOADING DATE OF THE SOFTWARE
+            # UNCOMMENT THIS SECTION IF YOU WANT TO PASS DATES MANUALLY
+            '''
+            try:
+                # Enter From Date (Nepali calendar)
+                from_date_field = self.wait.until(EC.presence_of_element_located((By.ID, "nepaliFrom")))
+                from_date_field.clear()
+                from_date_field.send_keys("2081-01-01")  # Example date, replace with desired date
+                logging.info("Entered From Date")
+                self.__take_screenshot("FROM_DATE_ENTERED")
+                
+                # Enter To Date (Nepali calendar)
+                to_date_field = self.driver.find_element(By.ID, "nepaliTo")
+                to_date_field.clear()
+                to_date_field.send_keys("2081-12-30")  # Example date, replace with desired date
+                logging.info("Entered To Date")
+                self.__take_screenshot("TO_DATE_ENTERED")
+                
+                # Click on Get button
+                get_button = self.driver.find_element(By.ID, "btnGetMiscPayment")
+                get_button.click()
+                logging.info("Clicked on Get button")
+                self.__take_screenshot("GET_BUTTON_CLICKED")
+                
+                # Wait for page to reload with filtered data
+                time.sleep(5)
+            except Exception as e:
+                logging.error(f"Error in date filtering: {str(e)}")
+                self.__take_screenshot("DATE_FILTERING_ERROR")
+            '''
+            # === END DATE FILTERING SECTION ===
+            
             page_number = 1
             total_due_bills_collected = 0
             
             while True:
-                # Navigate directly to EMR Bill List for current page
-                self.driver.get(f"http://lunivacare.ddns.net:8080/himsnew/bill/bill_list?list=Emergency&page={page_number}")
-                time.sleep(3)  # Wait for page to load
-                logging.info(f"Navigated to EMR Bill List page {page_number}")
-                self.__take_screenshot(f"EMR_BILL_LIST_PAGE_{page_number}")
+                # If we're not on page 1, navigate to the specific page
+                if page_number > 1:
+                    self.driver.get(f"http://lunivacare.ddns.net:8080/himsnew/bill/bill_list?list=Emergency&page={page_number}")
+                    time.sleep(3)  # Wait for page to load
+                    logging.info(f"Navigated to EMR Bill List page {page_number}")
+                    self.__take_screenshot(f"EMR_BILL_LIST_PAGE_{page_number}")
                 
                 # Look for bill table
                 try:
@@ -172,6 +212,7 @@ class EMRCollectDueBills(unittest.TestCase):
                 # Check if there's a next page
                 try:
                     next_button = self.driver.find_element(By.ID, "tbl-bill-list_next")
+                    # Check if the next button is disabled
                     if "disabled" in next_button.get_attribute("class"):
                         logging.info("Reached last page, no more pages to process")
                         break
