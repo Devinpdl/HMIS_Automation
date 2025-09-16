@@ -91,39 +91,75 @@ class EMRCollectDueBills(unittest.TestCase):
             logging.info("Navigated to EMR Bill List")
             self.__take_screenshot("EMR_BILL_LIST")
             
+            # Click on English date toggle
+            try:
+                english_toggle = self.wait.until(EC.element_to_be_clickable((By.ID, "show_nepaliCheck")))
+                if not english_toggle.is_selected():
+                    # Use JavaScript click to avoid interception issues
+                    self.driver.execute_script("arguments[0].click();", english_toggle)
+                    logging.info("Clicked on English date toggle")
+                    self.__take_screenshot("ENGLISH_TOGGLE_CLICKED")
+                else:
+                    logging.info("English date toggle already selected")
+            except Exception as e:
+                logging.error(f"Error clicking English date toggle: {str(e)}")
+                self.__take_screenshot("ENGLISH_TOGGLE_ERROR")
+            
+            # Wait for English date fields to appear
+            time.sleep(2)
+            
             # === DATE FILTERING SECTION ===
             # COMMENT OUT THIS SECTION IF YOU WANT TO USE THE DEFAULT LOADING DATE OF THE SOFTWARE
             # UNCOMMENT THIS SECTION IF YOU WANT TO PASS DATES MANUALLY
-            '''
+            # ------------------------------------------------------------------
+            # For manual date entry, uncomment the following lines:
             try:
-                # Enter From Date (Nepali calendar)
-                from_date_field = self.wait.until(EC.presence_of_element_located((By.ID, "nepaliFrom")))
+                # Try different selectors for date fields
+                try:
+                    from_date_field = self.wait.until(EC.presence_of_element_located((By.ID, "englishFrom")))
+                except:
+                    try:
+                        from_date_field = self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input#englishFrom")))
+                    except:
+                        # If ID doesn't work, try by name
+                        from_date_field = self.wait.until(EC.presence_of_element_located((By.NAME, "fromDate")))
+                
                 from_date_field.clear()
-                from_date_field.send_keys("2081-01-01")  # Example date, replace with desired date
-                logging.info("Entered From Date")
+                from_date_field.send_keys("2025-09-15")  # From date - modify as needed
+                logging.info("Entered From Date: 2025-09-15")
                 self.__take_screenshot("FROM_DATE_ENTERED")
                 
-                # Enter To Date (Nepali calendar)
-                to_date_field = self.driver.find_element(By.ID, "nepaliTo")
+                # Try different selectors for To date field
+                try:
+                    to_date_field = self.driver.find_element(By.ID, "englishTo")
+                except:
+                    try:
+                        to_date_field = self.driver.find_element(By.CSS_SELECTOR, "input#englishTo")
+                    except:
+                        # If ID doesn't work, try by name
+                        to_date_field = self.driver.find_element(By.NAME, "toDate")
+                
                 to_date_field.clear()
-                to_date_field.send_keys("2081-12-30")  # Example date, replace with desired date
-                logging.info("Entered To Date")
+                to_date_field.send_keys("2025-09-16")  # To date - modify as needed
+                logging.info("Entered To Date: 2025-09-16")
                 self.__take_screenshot("TO_DATE_ENTERED")
                 
-                # Click on Get button
+                # Click on Get Bills button
                 get_button = self.driver.find_element(By.ID, "btnGetMiscPayment")
-                get_button.click()
-                logging.info("Clicked on Get button")
-                self.__take_screenshot("GET_BUTTON_CLICKED")
+                # Use JavaScript click to avoid interception issues
+                self.driver.execute_script("arguments[0].click();", get_button)
+                logging.info("Clicked on Get Bills button")
+                self.__take_screenshot("GET_BILLS_BUTTON_CLICKED")
                 
                 # Wait for page to reload with filtered data
                 time.sleep(5)
             except Exception as e:
                 logging.error(f"Error in date filtering: {str(e)}")
                 self.__take_screenshot("DATE_FILTERING_ERROR")
-            '''
+            # ------------------------------------------------------------------
             # === END DATE FILTERING SECTION ===
             
+            # Process the bill table
             page_number = 1
             total_due_bills_collected = 0
             
@@ -132,7 +168,7 @@ class EMRCollectDueBills(unittest.TestCase):
                 if page_number > 1:
                     self.driver.get(f"http://lunivacare.ddns.net:8080/himsnew/bill/bill_list?list=Emergency&page={page_number}")
                     time.sleep(3)  # Wait for page to load
-                    logging.info(f"Navigated to EMR Bill List page {page_number}")
+                    logging.info(f"Navigate to page {page_number}")
                     self.__take_screenshot(f"EMR_BILL_LIST_PAGE_{page_number}")
                 
                 # Look for bill table
@@ -141,14 +177,18 @@ class EMRCollectDueBills(unittest.TestCase):
                     logging.info("Bill table found")
                     self.__take_screenshot(f"BILL_TABLE_FOUND_PAGE_{page_number}")
                     
-                    # Find all rows in the table
-                    rows = bill_table.find_elements(By.XPATH, ".//tbody//tr")
+                    # Find all rows in the table body - more inclusive selector
+                    rows = bill_table.find_elements(By.XPATH, ".//tbody/tr")
                     logging.info(f"Found {len(rows)} bill rows on page {page_number}")
                     
                     # Process each row to find due bills
                     due_bills_found_on_page = 0
                     for i, row in enumerate(rows):
                         try:
+                            # Get the row class to differentiate odd/even if available
+                            row_class = row.get_attribute("class") or "no-class"
+                            logging.info(f"Processing row {i+1} with class '{row_class}' on page {page_number}")
+                            
                             # Get cells in the row
                             cells = row.find_elements(By.XPATH, ".//td")
                             if len(cells) >= 8:  # Ensure we have enough cells
@@ -156,7 +196,10 @@ class EMRCollectDueBills(unittest.TestCase):
                                 status_cell = cells[7]  # 8th column is status
                                 status_text = status_cell.text.strip()
                                 
-                                if "Due" in status_text:
+                                logging.info(f"Row {i+1} status: '{status_text}'")
+                                
+                                # Check for "Due" status (exact match)
+                                if status_text == "Due":
                                     due_bills_found_on_page += 1
                                     bill_no = cells[0].text.strip()  # 1st column is bill number
                                     due_amount = cells[6].text.strip()  # 7th column is due amount
@@ -243,7 +286,7 @@ class EMRCollectDueBills(unittest.TestCase):
             
             # Get the paid amount (already paid)
             try:
-                paid_amount_element = self.wait.until(EC.presence_of_element_located((By.NAME, "receivedAmount")))
+                paid_amount_element = self.wait.until(EC.presence_of_element_located((By.NAME, "paidAmount")))
                 paid_amount = paid_amount_element.get_attribute("value")
                 logging.info(f"Paid amount: {paid_amount}")
             except Exception as e:
@@ -261,13 +304,21 @@ class EMRCollectDueBills(unittest.TestCase):
             
             # Calculate remaining amount to be paid
             try:
-                grand_total_value = int(grand_total)
-                paid_amount_value = int(paid_amount)
+                # Remove any commas and convert to float
+                grand_total_value = float(grand_total.replace(',', ''))
+                paid_amount_value = float(paid_amount.replace(',', ''))
                 remaining_amount = grand_total_value - paid_amount_value
                 logging.info(f"Remaining amount to pay: {remaining_amount}")
             except Exception as e:
                 logging.error(f"Error calculating remaining amount: {str(e)}")
-                remaining_amount = due_amount  # Use the due amount from the table
+                # Try to use the due amount from the table, removing any non-numeric characters
+                try:
+                    due_amount_clean = ''.join(filter(str.isdigit, due_amount))
+                    remaining_amount = float(due_amount_clean) if due_amount_clean else 0
+                    logging.info(f"Using due amount from table: {remaining_amount}")
+                except:
+                    remaining_amount = 0
+                    logging.error("Could not determine remaining amount, defaulting to 0")
             
             # Enter the remaining amount in the Received Amount field
             try:
@@ -305,7 +356,8 @@ class EMRCollectDueBills(unittest.TestCase):
                 submit_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "sbmtbtn")))
                 self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", submit_btn)
                 time.sleep(0.5)
-                submit_btn.click()
+                # Use JavaScript click to avoid interception issues
+                self.driver.execute_script("arguments[0].click();", submit_btn)
                 logging.info("Clicked Submit button")
                 self.__take_screenshot("SUBMIT_BUTTON_CLICKED")
                 
@@ -394,10 +446,13 @@ if __name__ == "__main__":
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
     
+    # Generate timestamp for unique report name
+    timestamp = time.strftime('%Y%m%d_%H%M%S')
+    
     runner = xmlrunner.XMLTestRunner(
         output=report_dir,
         verbosity=2,
-        outsuffix=""
+        outsuffix=f"_{timestamp}"
     )
     
     suite = unittest.TestLoader().loadTestsFromTestCase(EMRCollectDueBills)
