@@ -160,9 +160,9 @@ class EMRBilling(unittest.TestCase):
         logging.info("Login successful")
         self.__take_screenshot("LOGIN_SUCCESS")
 
-    def __get_latest_patient_id(self):
+    def __get_latest_emr_patient_id(self):
         """
-        Get the latest patient ID from the patient_ids folders.
+        Get the latest EMR patient ID from the patient_ids folders.
         Returns the most recent patient ID based on file modification time.
         """
         try:
@@ -171,6 +171,7 @@ class EMRBilling(unittest.TestCase):
                 os.path.join(base_dir, 'emr_billing', 'patient_ids'),
                 os.path.join(base_dir, 'emr_combined', 'patient_ids'),
                 os.path.join(base_dir, 'emr_registration', 'patient_ids'),
+                os.path.join(base_dir, 'emr_registration_existing', 'patient_ids'),
                 os.path.join(base_dir, 'opd_billing', 'patient_ids'),
                 os.path.join(base_dir, 'opd_combined', 'patient_ids'),
                 os.path.join(base_dir, 'opd_registration', 'patient_ids')
@@ -195,7 +196,7 @@ class EMRBilling(unittest.TestCase):
             
             if not json_files:
                 logging.error("No patient ID files found in any patient_ids folder")
-                raise ValueError("No patient ID files found in any patient_ids folder (emr_billing, emr_combined, emr_registration, opd_billing, opd_combined, opd_registration)")
+                raise ValueError("No patient ID files found in any patient_ids folder (emr_billing, emr_combined, emr_registration, emr_registration_existing, opd_billing, opd_combined, opd_registration)")
             
             # Find the most recent file
             latest_file = max(json_files, key=os.path.getmtime)
@@ -215,21 +216,19 @@ class EMRBilling(unittest.TestCase):
 
     def test_emr_billing(self):
         """
-        Test method: Perform EMR billing using the latest patient ID and select both CBC and ABO & Rh Factor tests.
+        Test method: Perform EMR billing with Cash payment using the latest patient ID.
         """
-        logging.info("Starting EMR Billing...")
+        logging.info("Starting EMR Billing with Cash Payment...")
         self.__perform_emr_billing()
 
     def __perform_emr_billing(self):
         """
-        Perform EMR billing process using the latest patient ID.
+        Perform EMR billing with Cash payment using the latest patient ID.
         """
         try:
-            # Navigate to EMR Billing
-            self.wait.until(EC.element_to_be_clickable((By.XPATH, "//li[@id='patient_menu']/a"))).click()
-            billing_link = self.wait.until(EC.element_to_be_clickable(
-                (By.XPATH, "//a[@href='http://lunivacare.ddns.net:8080/himsnew/bill/createBill?bt=Emergency']")))
-            billing_link.click()
+            # Navigate directly to EMR Billing
+            self.driver.get("http://lunivacare.ddns.net:8080/himsnew/bill/createBill?bt=Emergency")
+            self.wait.until(EC.presence_of_element_located((By.ID, "patientId")))
             logging.info("Navigated to EMR Billing page")
             self.__take_screenshot("EMR_BILLING_PAGE")
 
@@ -237,8 +236,8 @@ class EMRBilling(unittest.TestCase):
             original_window = self.driver.current_window_handle
             logging.info(f"Original window handle: {original_window}")
 
-            # Use the latest patient ID
-            patient_id_to_use = self.__get_latest_patient_id()
+            # Use the latest EMR patient ID
+            patient_id_to_use = self.__get_latest_emr_patient_id()
             self.patient_id = patient_id_to_use
 
             # Enter Patient ID
@@ -259,15 +258,23 @@ class EMRBilling(unittest.TestCase):
             logging.info("Patient information loaded")
             self.__take_screenshot("PATIENT_INFO_LOADED")
 
+            # Handle "Recommended Test For Emergency" notification if it appears
+            self.__handle_recommended_test_notification()
+
+            # Handle outstanding balance alert if it appears
+            self.__handle_outstanding_balance_alert()
+
             # Select tests (CBC and ABO & Rh Factor)
             self.__select_test()
 
-            # Enter remarks
-            remarks_field = self.wait.until(EC.presence_of_element_located((By.ID, "billRemarks")))
-            remarks_field.clear()
-            remarks_field.send_keys("paid")
-            logging.info("Entered remarks: 'paid'")
-            self.__take_screenshot("REMARKS_ENTERED")
+            # Handle performedByForm modal if it appears
+            self.__handle_performed_by_modal()
+
+            # Select Cash payment option
+            self.__select_cash_payment()
+
+            # Enter remarks - all amount paid
+            self.__enter_payment_remarks()
 
             # Submit the form
             self.__submit_billing_form()
@@ -294,6 +301,12 @@ class EMRBilling(unittest.TestCase):
             attempt = 1
             while attempt <= max_attempts:
                 try:
+                    # Wait for any overlays to disappear before clicking dropdown
+                    try:
+                        self.wait.until(EC.invisibility_of_element_located((By.CLASS_NAME, "ui-widget-overlay")))
+                    except:
+                        pass  # If overlay not found, continue
+                    
                     # Locate and open the test dropdown
                     dropdown = self.short_wait.until(EC.element_to_be_clickable(
                         (By.XPATH, "//span[starts-with(@id, 'select2-chosen-')]")))
@@ -448,68 +461,197 @@ class EMRBilling(unittest.TestCase):
                                 logging.error(f"Failed to handle performedByModal after {max_modal_attempts} attempts")
                                 raise TimeoutException(f"Failed to handle performedByModal after {max_modal_attempts} attempts")
 
+    def __handle_performed_by_modal(self):
+        """
+        Handle the performedByForm modal if it appears after selecting tests.
+        """
+        try:
+            # Wait a moment for modal to potentially appear
+            time.sleep(2)
+            
+            # Check if the performedByForm modal is visible
+            modal = self.driver.find_element(By.ID, "performedByForm")
+            if modal.is_displayed():
+                logging.info("PerformedByForm modal detected")
+                self.__take_screenshot("PERFORMED_BY_MODAL_DETECTED")
+                
+                # Look for the Select button and click it
+                try:
+                    select_btn = self.wait.until(EC.element_to_be_clickable(
+                        (By.XPATH, "//button[@type='submit' and contains(@class, 'antoclose') and contains(text(), 'Select')]")))
+                    select_btn.click()
+                    logging.info("Clicked Select button in performedByForm modal")
+                    self.__take_screenshot("PERFORMED_BY_MODAL_SELECT_CLICKED")
+                    
+                    # Wait for modal to close
+                    self.wait.until(EC.invisibility_of_element_located((By.ID, "performedByForm")))
+                    logging.info("PerformedByForm modal closed")
+                except TimeoutException:
+                    # Try alternative XPath for the Select button
+                    try:
+                        select_btn = self.wait.until(EC.element_to_be_clickable(
+                            (By.XPATH, "//button[contains(@class, 'btn-primary') and contains(text(), 'Select')]")))
+                        select_btn.click()
+                        logging.info("Clicked Select button (alternative) in performedByForm modal")
+                        self.__take_screenshot("PERFORMED_BY_MODAL_SELECT_CLICKED_ALT")
+                        
+                        # Wait for modal to close
+                        self.wait.until(EC.invisibility_of_element_located((By.ID, "performedByForm")))
+                        logging.info("PerformedByForm modal closed")
+                    except TimeoutException:
+                        logging.warning("Could not find Select button in performedByForm modal")
+                        self.__take_screenshot("PERFORMED_BY_MODAL_SELECT_NOT_FOUND")
+            else:
+                logging.info("No performedByForm modal detected")
+        except Exception as e:
+            # If modal doesn't exist or isn't visible, that's fine
+            logging.info("No performedByForm modal found or not visible")
+
+    def __select_cash_payment(self):
+        """
+        Select Cash payment option and input the full gross total amount as paid amount.
+        """
+        try:
+            # Select Cash as payment type
+            payment_type_select = self.wait.until(EC.presence_of_element_located((By.NAME, "paymentType")))
+            Select(payment_type_select).select_by_value("Cash")
+            logging.info("Selected 'Cash' as payment type")
+            self.__take_screenshot("CASH_PAYMENT_TYPE_SELECTED")
+            
+            # Get the gross total amount (no need to select payment mode for Cash)
+            grand_total_element = self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".grandTotal .rounded_grand_total")))
+            grand_total_text = grand_total_element.text
+            logging.info(f"Grand total text: {grand_total_text}")
+            
+            # Extract numeric value from the text (remove Rs. and any other non-numeric characters)
+            grand_total_match = re.search(r'(\d+)', grand_total_text)
+            if grand_total_match:
+                grand_total = int(grand_total_match.group(1))
+                logging.info(f"Extracted grand total: {grand_total}")
+                
+                # Enter the full amount in paid amount field
+                paid_amount_field = self.wait.until(EC.presence_of_element_located((By.ID, "paidamts")))
+                paid_amount_field.clear()
+                paid_amount_field.send_keys(str(grand_total))
+                logging.info(f"Entered full amount ({grand_total}) in paid amount field")
+                self.__take_screenshot("FULL_AMOUNT_ENTERED")
+            else:
+                logging.warning("Could not extract grand total amount")
+                self.__take_screenshot("GRAND_TOTAL_EXTRACTION_FAILED")
+                
+        except Exception as e:
+            logging.warning(f"Failed to select cash payment: {str(e)}")
+            self.__take_screenshot("CASH_PAYMENT_ERROR")
+
+    def __enter_payment_remarks(self):
+        """
+        Enter remarks stating that all amount is paid.
+        """
+        try:
+            remarks_field = self.wait.until(EC.presence_of_element_located((By.ID, "billRemarks")))
+            remarks_field.clear()
+            
+            # Get the gross total amount for the remarks
+            grand_total_element = self.driver.find_element(By.CSS_SELECTOR, ".grandTotal .rounded_grand_total")
+            grand_total_text = grand_total_element.text
+            grand_total_match = re.search(r'(\d+)', grand_total_text)
+            if grand_total_match:
+                grand_total = int(grand_total_match.group(1))
+                remarks_field.send_keys(f"All amount paid: {grand_total}")
+                logging.info(f"Entered remarks: 'All amount paid: {grand_total}'")
+            else:
+                remarks_field.send_keys("All amount paid")
+                logging.info("Entered remarks: 'All amount paid'")
+            
+            self.__take_screenshot("PAYMENT_REMARKS_ENTERED")
+        except Exception as e:
+            logging.warning(f"Failed to enter payment remarks: {str(e)}")
+            self.__take_screenshot("PAYMENT_REMARKS_ERROR")
+
+    def __handle_outstanding_balance_alert(self):
+        """
+        Handle the outstanding balance alert dialog if it appears.
+        """
+        try:
+            # Wait a moment for alert to potentially appear
+            time.sleep(2)
+            
+            # Check if the alert dialog is visible
+            alert_dialogs = self.driver.find_elements(By.CLASS_NAME, "ui-dialog")
+            for alert_dialog in alert_dialogs:
+                if alert_dialog.is_displayed():
+                    # Check if it's the outstanding balance alert
+                    title_elements = alert_dialog.find_elements(By.CLASS_NAME, "ui-dialog-title")
+                    if title_elements and "Alert" in title_elements[0].text:
+                        message_elements = alert_dialog.find_elements(By.ID, "lblMessage")
+                        if message_elements and "outstanding balance" in message_elements[0].text:
+                            logging.info("Outstanding balance alert detected")
+                            self.__take_screenshot("OUTSTANDING_BALANCE_ALERT_DETECTED")
+                            
+                            # Look for the Okay button and click it
+                            try:
+                                okay_btn = alert_dialog.find_element(By.CLASS_NAME, "confirm")
+                                okay_btn.click()
+                                logging.info("Clicked Okay button in outstanding balance alert")
+                                self.__take_screenshot("OUTSTANDING_BALANCE_ALERT_OKAY_CLICKED")
+                                
+                                # Wait for alert to close
+                                self.wait.until(EC.invisibility_of_element(alert_dialog))
+                                logging.info("Outstanding balance alert closed")
+                                return
+                            except Exception as e:
+                                logging.warning(f"Could not click Okay button in outstanding balance alert: {str(e)}")
+                                self.__take_screenshot("OUTSTANDING_BALANCE_ALERT_OKAY_FAILED")
+            
+            logging.info("No outstanding balance alert detected")
+        except Exception as e:
+            # If alert doesn't exist or isn't visible, that's fine
+            logging.info("No outstanding balance alert found or not visible")
+
+    def __handle_recommended_test_notification(self):
+        """
+        Handle the 'Recommended Test For Emergency' notification if it appears.
+        """
+        try:
+            # Wait a moment for notification to potentially appear
+            time.sleep(2)
+            
+            # Check if the recommended test notification is visible
+            notification_title_elements = self.driver.find_elements(By.XPATH, "//h4[contains(text(), 'Recommended Test For Emergency')]")
+            if notification_title_elements:
+                notification_title = notification_title_elements[0]
+                # Find the parent container
+                notification_container = notification_title.find_element(By.XPATH, "./ancestor::div[contains(@class, 'ui-pnotify-container')]")
+                if notification_container.is_displayed():
+                    logging.info("Recommended Test For Emergency notification detected")
+                    self.__take_screenshot("RECOMMENDED_TEST_NOTIFICATION_DETECTED")
+                    
+                    # Look for the close button and click it
+                    try:
+                        close_btn = notification_container.find_element(By.CLASS_NAME, "ui-pnotify-closer")
+                        close_btn.click()
+                        logging.info("Closed Recommended Test For Emergency notification")
+                        self.__take_screenshot("RECOMMENDED_TEST_NOTIFICATION_CLOSED")
+                        
+                        # Wait for notification to close
+                        self.wait.until(EC.invisibility_of_element(notification_container))
+                        logging.info("Recommended Test For Emergency notification closed")
+                    except Exception as e:
+                        logging.warning(f"Could not close Recommended Test For Emergency notification: {str(e)}")
+                        self.__take_screenshot("RECOMMENDED_TEST_NOTIFICATION_CLOSE_FAILED")
+                else:
+                    logging.info("Recommended Test For Emergency notification not visible")
+            else:
+                logging.info("No Recommended Test For Emergency notification detected")
+        except Exception as e:
+            # If notification doesn't exist or isn't visible, that's fine
+            logging.info("No Recommended Test For Emergency notification found or not visible")
+
     def __submit_billing_form(self):
         """
         Submit the billing form, ensuring no modals are open.
         """
         try:
-            # Check for performedByModal and close it if present
-            max_modal_attempts = 3
-            modal_attempt = 1
-            while modal_attempt <= max_modal_attempts:
-                try:
-                    modal = self.driver.find_element(By.ID, "performedByModal")
-                    if modal.is_displayed():
-                        logging.warning(f"Performed By modal still open before submitting form (attempt {modal_attempt})")
-                        self.__take_screenshot(f"UNEXPECTED_MODAL_BEFORE_SUBMIT_{modal_attempt}")
-
-                        # Try to find and click the Select or Close button
-                        button_xpaths = [
-                            "//button[@type='submit' and contains(@class, 'antoclose')]",
-                            "//button[@type='submit' and contains(text(), 'Select')]",
-                            "//button[contains(@class, 'btn-primary') and contains(text(), 'Select')]",
-                            "//button[contains(@class, 'close')]",
-                            "//button[contains(text(), 'Close') or contains(text(), 'Cancel')]"
-                        ]
-                        button = None
-                        for xpath in button_xpaths:
-                            try:
-                                button = self.short_wait.until(EC.element_to_be_clickable((By.XPATH, xpath)))
-                                logging.info(f"Found button to close modal using XPath: {xpath}")
-                                break
-                            except TimeoutException:
-                                logging.debug(f"Button XPath failed: {xpath}")
-                                continue
-
-                        if button:
-                            try:
-                                button.click()
-                                logging.info(f"Clicked button to close modal (attempt {modal_attempt})")
-                                self.__take_screenshot(f"UNEXPECTED_MODAL_CLOSED_{modal_attempt}")
-                            except ElementClickInterceptedException:
-                                logging.warning("Button click intercepted, trying JavaScript click")
-                                self.driver.execute_script("arguments[0].click();", button)
-                                logging.info(f"JavaScript clicked button to close modal (attempt {modal_attempt})")
-                                self.__take_screenshot(f"UNEXPECTED_MODAL_JS_CLOSED_{modal_attempt}")
-
-                            self.short_wait.until(EC.invisibility_of_element_located((By.ID, "performedByModal")))
-                            logging.info("Performed By modal closed before submitting form")
-                            break
-                        else:
-                            logging.warning(f"No button found to close modal (attempt {modal_attempt})")
-                            self.__take_screenshot(f"NO_BUTTON_TO_CLOSE_MODAL_{modal_attempt}")
-
-                        modal_attempt += 1
-                        if modal_attempt > max_modal_attempts:
-                            logging.error(f"Failed to close performedByModal after {max_modal_attempts} attempts")
-                            raise TimeoutException(f"Failed to close performedByModal after {max_modal_attempts} attempts")
-                    else:
-                        logging.info("No performedByModal detected before submitting form")
-                        break
-                except Exception:
-                    logging.info("No performedByModal detected before submitting form")
-                    break
-
             # Click Submit button
             submit_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "sbmtbtn")))
             self.driver.execute_script(
@@ -573,26 +715,39 @@ class EMRBilling(unittest.TestCase):
             wait_for_windows.until(lambda d: len(d.window_handles) > 1)
             logging.info(f"Number of windows: {len(self.driver.window_handles)}")
             
-            # Switch to the new window or tab
+            # Switch to the new window or tab (avoid devtools windows)
+            target_window = None
             for window_handle in self.driver.window_handles:
                 if window_handle != original_window:
                     self.driver.switch_to.window(window_handle)
-                    break
+                    current_url = self.driver.current_url
+                    # Skip devtools windows
+                    if not current_url.startswith("devtools://"):
+                        target_window = window_handle
+                        break
             
-            logging.info(f"Switched to new window: {self.driver.current_url}")
-            self.__take_screenshot("BILL_WINDOW")
-            
-            # Extract the bill No from the new window
-            bill_no = self.__extract_bill_no_from_invoice()
-            if bill_no:
-                self.bill_no = bill_no
-                logging.info(f"Successfully captured Bill No: {self.bill_no}")
+            if target_window:
+                logging.info(f"Switched to new window: {self.driver.current_url}")
+                self.__take_screenshot("BILL_WINDOW")
+                
+                # Extract the bill No from the new window
+                bill_no = self.__extract_bill_no_from_invoice()
+                if bill_no:
+                    self.bill_no = bill_no
+                    logging.info(f"Successfully captured Bill No: {self.bill_no}")
+                else:
+                    logging.warning("Could not extract Bill No from invoice")
+                
+                # Close the bill window and switch back to the original window
+                self.driver.close()
+                self.driver.switch_to.window(original_window)
+                logging.info("Closed bill window and switched back to original window")
             else:
-                logging.warning("Could not extract Bill No from invoice")
-            
-            # Switch back to the original window
-            self.driver.switch_to.window(original_window)
-            logging.info("Switched back to original window")
+                logging.warning("No bill window found. Trying to find Bill No in current window")
+                # Switch back to original window if we couldn't find a proper bill window
+                self.driver.switch_to.window(original_window)
+                self.bill_no = self.__capture_bill_no_fallback()
+                logging.info(f"Captured Bill No: {self.bill_no}")
             
             # Capture Bill ID by hovering over Print Bill button
             try:
@@ -623,7 +778,7 @@ class EMRBilling(unittest.TestCase):
                     bill_id_elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Bill Id') or contains(text(), 'Bill ID')]")
                     for elem in bill_id_elements:
                         text = elem.text
-                        match = re.search(r'Bill Id\s*:?\s*(\d+)', text, re.IGNORECASE)
+                        match = re.search(r'Bill Id\s*:?\\s*(\d+)', text, re.IGNORECASE)
                         if match:
                             self.bill_id = match.group(1)
                             logging.info(f"Captured Bill ID from page element: {self.bill_id}")
@@ -638,6 +793,8 @@ class EMRBilling(unittest.TestCase):
             
         except TimeoutException:
             logging.warning("No new window appeared. Trying to find Bill No in current window")
+            # Make sure we're on the original window
+            self.driver.switch_to.window(original_window)
             self.bill_no = self.__capture_bill_no_fallback()
             logging.info(f"Captured Bill No: {self.bill_no}")
             # Also attempt to capture Bill ID
@@ -669,7 +826,7 @@ class EMRBilling(unittest.TestCase):
                     bill_id_elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Bill Id') or contains(text(), 'Bill ID')]")
                     for elem in bill_id_elements:
                         text = elem.text
-                        match = re.search(r'Bill Id\s*:?\s*(\d+)', text, re.IGNORECASE)
+                        match = re.search(r'Bill Id\s*:?\\s*(\d+)', text, re.IGNORECASE)
                         if match:
                             self.bill_id = match.group(1)
                             logging.info(f"Captured Bill ID from page element (fallback): {self.bill_id}")
@@ -739,7 +896,7 @@ class EMRBilling(unittest.TestCase):
             bill_elements = self.driver.find_elements(By.XPATH, "//span[contains(text(), 'Bill') and contains(text(), 'ID') or contains(text(), 'No')]")
             for elem in bill_elements:
                 text = elem.text
-                no_match = re.search(r'Bill\s*(ID|No)?\s*:?\s*(\d+)', text, re.IGNORECASE)
+                no_match = re.search(r'Bill\s*(ID|No)?\s*:?\\s*(\d+)', text, re.IGNORECASE)
                 if no_match:
                     return no_match.group(2)
             
@@ -772,9 +929,10 @@ class EMRBilling(unittest.TestCase):
         Test-level teardown: Save bill info to JSON file if captured.
         """
         if self.bill_no:
-            bill_json_file = os.path.join(bill_nos_dir, f"{self.bill_no.zfill(8)}.json")
+            bill_json_file = os.path.join(bill_nos_dir, f"{self.bill_no}.json")
             bill_data = {
-                "bill_no": self.bill_no.zfill(8),
+                "bill_no": self.bill_no,
+                "bill_id": self.bill_id if hasattr(self, 'bill_id') and self.bill_id else "unknown",
                 "patient_id": self.patient_id if hasattr(self, 'patient_id') and self.patient_id else "unknown",
                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
             }
@@ -829,10 +987,13 @@ if __name__ == "__main__":
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
     
+    # Generate timestamp for unique report filename
+    timestamp = time.strftime('%Y%m%d_%H%M%S')
+    
     runner = XMLTestRunnerWithBillInfo(
         output=report_dir,
         verbosity=2,
-        outsuffix=""
+        outsuffix=f"_{timestamp}"
     )
     
     suite = unittest.TestLoader().loadTestsFromTestCase(EMRBilling)
