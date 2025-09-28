@@ -805,15 +805,34 @@ class EMRBillingCredit(unittest.TestCase):
                     elif current_url.startswith("chrome://print/"):
                         # This is a print dialog - we need to handle it differently
                         logging.info(f"Detected print dialog: {current_url}")
-                        # Instead of closing, switch back to original window
+                        # Extract bill no from the original window since print dialog doesn't have the info
                         self.driver.switch_to.window(original_window)
-                        # Extract bill no from the original window
                         bill_no = self.__extract_bill_no_from_invoice_fallback()
                         if bill_no:
                             self.bill_no = bill_no
                             logging.info(f"Successfully captured Bill No: {self.bill_no}")
                         else:
                             logging.warning("Could not extract Bill No from invoice")
+                        
+                        # Close the print dialog window by switching to it and sending ESC key
+                        self.driver.switch_to.window(window_handle)  # Switch to print dialog
+                        try:
+                            # Send Escape key to close the print dialog
+                            from selenium.webdriver.common.keys import Keys
+                            self.driver.switch_to.active_element.send_keys(Keys.ESCAPE)
+                            time.sleep(1)  # Wait a moment for dialog to close
+                        except:
+                            pass  # If sending keys fails, continue
+                        
+                        # Try to close the print dialog window
+                        try:
+                            self.driver.close()
+                        except:
+                            # If close fails, just switch back to original window
+                            pass
+                        
+                        # Switch back to the original window
+                        self.driver.switch_to.window(original_window)
                         return  # Exit early since we've handled the print dialog
             else:
                 # If no appropriate window found, try original window
@@ -842,8 +861,8 @@ class EMRBillingCredit(unittest.TestCase):
                 self.driver.close()
                 self.driver.switch_to.window(original_window)
                 logging.info("Closed bill window and switched back to original window")
-                
-                else:
+            
+            else:
                 logging.warning("No bill window found. Trying to find Bill No in current window")
                 # Switch back to original window if we couldn't find a proper bill window
                 self.driver.switch_to.window(original_window)
@@ -1242,10 +1261,15 @@ class EMRBillingCredit(unittest.TestCase):
             if len(window_handles) > 1:
                 for handle in window_handles[1:]:
                     try:
+                        # Check if the window is still valid before attempting to close
                         cls.driver.switch_to.window(handle)
-                        logging.info(f"Closing window: {handle}")
-                        cls.driver.close()
-                        time.sleep(0.5)
+                        current_url = cls.driver.current_url
+                        # Skip devtools and chrome://print/ windows which cannot be closed normally
+                        if not current_url.startswith("devtools://") and not current_url.startswith("chrome://print/"):
+                            logging.info(f"Closing window: {handle}")
+                            cls.driver.close()
+                        else:
+                            logging.info(f"Skipping uncloseable window: {handle} ({current_url})")
                     except Exception as e:
                         logging.warning(f"Window {handle} already closed or not accessible: {str(e)}")
             
@@ -1273,8 +1297,7 @@ if __name__ == "__main__":
     
     runner = XMLTestRunnerWithBillInfo(
         output=report_dir,
-        verbosity=2,
-        outsuffix=""
+        verbosity=2
     )
     
     suite = unittest.TestLoader().loadTestsFromTestCase(EMRBillingCredit)
