@@ -889,7 +889,13 @@ class EMRBillingCredit(unittest.TestCase):
                 logging.info(f"Tooltip content: {title}")
                 if title:
                     # Extract Bill ID from tooltip with more robust regex
-                    bill_id_match = re.search(r'Bill Id\s*:\s*.*?>\s*(\d+)\s*<', title, re.IGNORECASE | re.DOTALL)
+                    # The tooltip contains actual HTML tags (not HTML entities), so we need patterns for real HTML
+                    # Try most specific pattern first for the actual HTML structure
+                    bill_id_match = re.search(r'Bill[^I]*I[^d]*d[^:]*:\s*.*?</strong>\s*<strong[^>]*>(\d+)', title, re.IGNORECASE | re.DOTALL)
+                    if not bill_id_match:
+                        bill_id_match = re.search(r'Bill Id\s*:\s*.*?</strong>\s*<strong[^>]*>(\d+)', title, re.IGNORECASE | re.DOTALL)
+                    if not bill_id_match:
+                        bill_id_match = re.search(r'Bill Id\s*:\s*</strong>\s*<strong[^>]*>(\d+)', title, re.IGNORECASE)
                     if not bill_id_match:
                         bill_id_match = re.search(r'Bill Id\s*:\s*(\d+)', title, re.IGNORECASE)
                     if not bill_id_match:
@@ -901,10 +907,16 @@ class EMRBillingCredit(unittest.TestCase):
                         logging.info(f"Captured Bill ID from tooltip: {self.bill_id}")
                     else:
                         logging.warning("Could not find Bill ID in tooltip")
+                        logging.warning(f"Tooltip that failed: {title}")
                         self.__take_screenshot("BILL_ID_TOOLTIP_NOT_FOUND")
                     
                     # Extract Patient ID from tooltip with more robust regex
-                    patient_id_match = re.search(r'Patient Id\s*:\s*.*?>\s*(\d+)\s*<', title, re.IGNORECASE | re.DOTALL)
+                    # Try first with 'Pat Id' then 'Patient Id' for different formats
+                    patient_id_match = re.search(r'Pat[^I]*I[^d]*d[^:]*:\s*.*?</strong>\s*(\d+)', title, re.IGNORECASE | re.DOTALL)
+                    if not patient_id_match:
+                        patient_id_match = re.search(r'Pat Id\s*:\s*.*?</strong>\s*(\d+)', title, re.IGNORECASE | re.DOTALL)
+                    if not patient_id_match:
+                        patient_id_match = re.search(r'Pat Id\s*:\s*(\d+)', title, re.IGNORECASE)
                     if not patient_id_match:
                         patient_id_match = re.search(r'Patient Id\s*:\s*(\d+)', title, re.IGNORECASE)
                     if not patient_id_match:
@@ -916,6 +928,7 @@ class EMRBillingCredit(unittest.TestCase):
                         logging.info(f"Captured Patient ID from tooltip: {self.patient_id}")
                     else:
                         logging.warning("Could not find Patient ID in tooltip")
+                        logging.warning(f"Tooltip that failed: {title}")
                         self.__take_screenshot("PATIENT_ID_TOOLTIP_NOT_FOUND")
                 else:
                     logging.warning("No data-original-title in print button")
@@ -998,7 +1011,13 @@ class EMRBillingCredit(unittest.TestCase):
                 logging.info(f"Tooltip content (fallback): {title}")
                 if title:
                     # Extract Bill ID from tooltip with more robust regex
-                    bill_id_match = re.search(r'Bill Id\s*:\s*.*?>\s*(\d+)\s*<', title, re.IGNORECASE | re.DOTALL)
+                    # The tooltip contains actual HTML tags (not HTML entities), so we need patterns for real HTML
+                    # Try most specific pattern first for the actual HTML structure
+                    bill_id_match = re.search(r'Bill[^I]*I[^d]*d[^:]*:\s*.*?</strong>\s*<strong[^>]*>(\d+)', title, re.IGNORECASE | re.DOTALL)
+                    if not bill_id_match:
+                        bill_id_match = re.search(r'Bill Id\s*:\s*.*?</strong>\s*<strong[^>]*>(\d+)', title, re.IGNORECASE | re.DOTALL)
+                    if not bill_id_match:
+                        bill_id_match = re.search(r'Bill Id\s*:\s*</strong>\s*<strong[^>]*>(\d+)', title, re.IGNORECASE)
                     if not bill_id_match:
                         bill_id_match = re.search(r'Bill Id\s*:\s*(\d+)', title, re.IGNORECASE)
                     if not bill_id_match:
@@ -1010,10 +1029,16 @@ class EMRBillingCredit(unittest.TestCase):
                         logging.info(f"Captured Bill ID from tooltip (fallback): {self.bill_id}")
                     else:
                         logging.warning("Could not find Bill ID in tooltip (fallback)")
+                        logging.warning(f"Tooltip that failed: {title}")
                         self.__take_screenshot("BILL_ID_TOOLTIP_NOT_FOUND_FALLBACK")
                     
                     # Extract Patient ID from tooltip with more robust regex
-                    patient_id_match = re.search(r'Patient Id\s*:\s*.*?>\s*(\d+)\s*<', title, re.IGNORECASE | re.DOTALL)
+                    # Try first with 'Pat Id' then 'Patient Id' for different formats
+                    patient_id_match = re.search(r'Pat[^I]*I[^d]*d[^:]*:\s*.*?</strong>\s*(\d+)', title, re.IGNORECASE | re.DOTALL)
+                    if not patient_id_match:
+                        patient_id_match = re.search(r'Pat Id\s*:\s*.*?</strong>\s*(\d+)', title, re.IGNORECASE | re.DOTALL)
+                    if not patient_id_match:
+                        patient_id_match = re.search(r'Pat Id\s*:\s*(\d+)', title, re.IGNORECASE)
                     if not patient_id_match:
                         patient_id_match = re.search(r'Patient Id\s*:\s*(\d+)', title, re.IGNORECASE)
                     if not patient_id_match:
@@ -1025,6 +1050,7 @@ class EMRBillingCredit(unittest.TestCase):
                         logging.info(f"Captured Patient ID from tooltip (fallback): {self.patient_id}")
                     else:
                         logging.warning("Could not find Patient ID in tooltip (fallback)")
+                        logging.warning(f"Tooltip that failed: {title}")
                         self.__take_screenshot("PATIENT_ID_TOOLTIP_NOT_FOUND_FALLBACK")
                 else:
                     logging.warning("No data-original-title in print button (fallback)")
